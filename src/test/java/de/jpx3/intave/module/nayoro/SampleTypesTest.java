@@ -34,6 +34,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
+import static de.jpx3.intave.module.nayoro.NearbyBlockTracker.LOOK_AHEAD_DECAY;
+import static de.jpx3.intave.module.nayoro.NearbyBlockTracker.MAX_LOOK_AHEAD;
+import static de.jpx3.intave.module.nayoro.NearbyBlockTracker.MIN_LOOK_AHEAD;
+import static de.jpx3.intave.module.nayoro.NearbyBlockTracker.NEARBY_BLOCK_RADIUS;
+import static de.jpx3.intave.share.ClientMath.floor;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class SampleTypesTest {
@@ -54,9 +59,9 @@ final class SampleTypesTest {
 
   @Test
   void dirtyBlocksUseReducedRadiusAndSendAirTombstones() {
-    int blockX = 7;
-    int blockY = 61;
-    int blockZ = 17;
+    int blockX = floor(10.0D - NEARBY_BLOCK_RADIUS);
+    int blockY = floor(64.0D - NEARBY_BLOCK_RADIUS);
+    int blockZ = floor(20.0D - NEARBY_BLOCK_RADIUS);
     AtomicReference<BlockState> state = new AtomicReference<>(BlockState.stone());
     BlockCache blockCache = mutableBlockCacheAt(blockX, blockY, blockZ, state);
     NearbyBlockTracker tracker = new NearbyBlockTracker();
@@ -105,10 +110,11 @@ final class SampleTypesTest {
     accesses.set(0);
     List<BlockUpdate> firstUnchanged = dirtyNearbyBlocks(tracker, blockCache, playerBox);
 
-    assertEquals(392, accesses.get());
+    int normalScanSize = scanVolume(playerBox, new Vector(), 0.0D);
+    assertEquals(normalScanSize, accesses.get());
     assertSame(firstUnchanged, dirtyNearbyBlocks(tracker, blockCache, playerBox),
       "unchanged scans should reuse the empty result");
-    assertEquals(2 * 392, accesses.get());
+    assertEquals(2 * normalScanSize, accesses.get());
   }
 
   @Test
@@ -191,25 +197,28 @@ final class SampleTypesTest {
 
   @Test
   void lookAheadExtendsOnlyTheViewedFacesIncludingUpAndDown() {
+    Position position = new Position(0.5D, 64.0D, 0.5D);
+    BoundingBox playerBox = playerBoxAt(position);
     Vector[] directions = {
       new Vector(1, 0, 0), new Vector(-1, 0, 0),
       new Vector(0, 1, 0), new Vector(0, -1, 0),
       new Vector(0, 0, 1), new Vector(0, 0, -1)
     };
-    BlockPosition[] targets = {
-      new BlockPosition(5, 64, 0), new BlockPosition(-5, 64, 0),
-      new BlockPosition(0, 70, 0), new BlockPosition(0, 59, 0),
-      new BlockPosition(0, 64, 5), new BlockPosition(0, 64, -5)
-    };
-    BlockPosition nearby = new BlockPosition(0, 64, 0);
+    BlockPosition[] targets = new BlockPosition[directions.length];
+    for (int i = 0; i < directions.length; i++) {
+      targets[i] = boundaryTarget(playerBox, directions[i], MAX_LOOK_AHEAD);
+    }
+    BlockPosition nearby = new BlockPosition(
+      floor(position.getX()), floor(position.getY()), floor(position.getZ())
+    );
     for (int i = 0; i < directions.length; i++) {
       Set<BlockPosition> blocks = Set.of(nearby, targets[i], targets[i ^ 1]);
-      BlockCache cache = blockCache(position ->
-        blocks.contains(position) ? BlockState.stone() : BlockState.empty()
+      BlockCache cache = blockCache(blockPosition ->
+        blocks.contains(blockPosition) ? BlockState.stone() : BlockState.empty()
       );
       Vector look = directions[i].clone();
       List<BlockUpdate> updates = sampleAt(
-        new NearbyBlockTracker(), cache, new Position(0.5D, 64.0D, 0.5D), look, 2.0D
+        new NearbyBlockTracker(), cache, position, look, MAX_LOOK_AHEAD
       );
 
       assertEquals(2, updates.size());
@@ -222,45 +231,52 @@ final class SampleTypesTest {
 
   @Test
   void diagonalLookAheadPreservesTheNormalSurroundings() {
+    Position position = new Position(0.5D, 64.0D, 0.5D);
+    BoundingBox playerBox = playerBoxAt(position);
+    Vector look = new Vector(1, 1, -1).normalize();
     Set<BlockPosition> scanned = scanAt(
-      new NearbyBlockTracker(), new Vector(1, 1, -1).normalize(), 2.0D
+      new NearbyBlockTracker(), look, MAX_LOOK_AHEAD
     );
 
-    assertTrue(scanned.contains(new BlockPosition(4, 69, -4)));
-    assertTrue(scanned.contains(new BlockPosition(-3, 61, 3)));
-    assertFalse(scanned.contains(new BlockPosition(-4, 60, 4)));
+    BlockPosition oppositeCorner = boundaryTarget(playerBox, look.clone().multiply(-1.0D), 0.0D);
+    assertTrue(scanned.contains(boundaryTarget(playerBox, look, MAX_LOOK_AHEAD)));
+    assertTrue(scanned.contains(oppositeCorner));
+    assertFalse(scanned.contains(offsetAlong(oppositeCorner, look, -1)));
   }
 
   @Test
   void recentMovementAccumulatesAndDecaysBackToNormalSurroundings() {
     NearbyBlockTracker tracker = new NearbyBlockTracker();
     Vector look = new Vector(0, 0, 1);
-    Set<BlockPosition> initial = scanAt(tracker, look, 0.5D);
-    assertTrue(initial.contains(new BlockPosition(0, 64, 4)));
-    assertFalse(initial.contains(new BlockPosition(0, 64, 6)));
+    BoundingBox playerBox = playerBoxAt(new Position(0.5D, 64.0D, 0.5D));
+    double initialMovement = MAX_LOOK_AHEAD / 4.0D;
+    BlockPosition maximumTarget = boundaryTarget(playerBox, look, MAX_LOOK_AHEAD);
+    Set<BlockPosition> initial = scanAt(tracker, look, initialMovement);
+    assertTrue(initial.contains(boundaryTarget(playerBox, look, initialMovement)));
+    assertFalse(initial.contains(maximumTarget));
 
     Set<BlockPosition> moving = initial;
-    for (int tick = 0; tick < 20; tick++) {
-      moving = scanAt(tracker, look, 0.5D);
+    for (int tick = 0; tick < decayTicksUntilNormal(); tick++) {
+      moving = scanAt(tracker, look, initialMovement);
     }
-    assertTrue(moving.contains(new BlockPosition(0, 64, 6)));
+    assertTrue(moving.contains(maximumTarget));
     Set<BlockPosition> decayed = scanAt(tracker, look, 0.0D);
-    assertTrue(decayed.size() > 392, "stopping must not immediately discard recent movement");
+    Set<BlockPosition> normal = scanAt(new NearbyBlockTracker(), look, 0.0D);
+    assertTrue(decayed.size() > normal.size(), "stopping must not immediately discard recent movement");
 
-    for (int tick = 0; tick < 40; tick++) {
+    for (int tick = 0; tick < decayTicksUntilNormal(); tick++) {
       Set<BlockPosition> next = scanAt(tracker, look, 0.0D);
       assertTrue(decayed.containsAll(next), "extra reach must keep shrinking while stationary");
       decayed = next;
     }
-    assertEquals(392, decayed.size());
-    assertEquals(scanAt(new NearbyBlockTracker(), look, 0.0D), decayed);
+    assertEquals(normal, decayed);
   }
 
   @Test
   void fasterMovementExtendsTheSearchFurther() {
     Vector look = new Vector(0, 0, 1);
-    Set<BlockPosition> slow = scanAt(new NearbyBlockTracker(), look, 0.5D);
-    Set<BlockPosition> fast = scanAt(new NearbyBlockTracker(), look, 2.0D);
+    Set<BlockPosition> slow = scanAt(new NearbyBlockTracker(), look, MAX_LOOK_AHEAD / 4.0D);
+    Set<BlockPosition> fast = scanAt(new NearbyBlockTracker(), look, MAX_LOOK_AHEAD);
 
     assertTrue(fast.containsAll(slow));
     assertTrue(fast.size() > slow.size());
@@ -269,18 +285,21 @@ final class SampleTypesTest {
   @Test
   void decayingReachFollowsTheCurrentLookDirection() {
     NearbyBlockTracker tracker = new NearbyBlockTracker();
-    scanAt(tracker, new Vector(0, 0, 1), 2.0D);
+    BoundingBox playerBox = playerBoxAt(new Position(0.5D, 64.0D, 0.5D));
+    Vector initialLook = new Vector(0, 0, 1);
+    Vector turnedLook = new Vector(-1, 0, 0);
+    scanAt(tracker, initialLook, MAX_LOOK_AHEAD);
 
-    Set<BlockPosition> turned = scanAt(tracker, new Vector(-1, 0, 0), 0.0D);
+    Set<BlockPosition> turned = scanAt(tracker, turnedLook, 0.0D);
 
-    assertTrue(turned.contains(new BlockPosition(-5, 64, 0)));
-    assertFalse(turned.contains(new BlockPosition(0, 64, 5)));
+    assertTrue(turned.contains(boundaryTarget(playerBox, turnedLook, MAX_LOOK_AHEAD * LOOK_AHEAD_DECAY)));
+    assertFalse(turned.contains(boundaryTarget(playerBox, initialLook, MAX_LOOK_AHEAD)));
   }
 
   @Test
   void largeMovementCannotCreateAnUnboundedScan() {
     Vector look = new Vector(1, 1, 1).normalize();
-    Set<BlockPosition> capped = scanAt(new NearbyBlockTracker(), look, 4.0D);
+    Set<BlockPosition> capped = scanAt(new NearbyBlockTracker(), look, MAX_LOOK_AHEAD);
     NearbyBlockTracker tracker = new NearbyBlockTracker();
     for (int tick = 0; tick < 5; tick++) {
       assertEquals(capped, scanAt(tracker, look, 30_000_000.0D));
@@ -290,10 +309,14 @@ final class SampleTypesTest {
 
   @Test
   void invalidMovementOrLookDirectionKeepsTheNormalScan() {
+    int normalScanSize = scanAt(new NearbyBlockTracker(), new Vector(0, 0, 1), 0.0D).size();
     for (double distance : new double[]{Double.NaN, Double.POSITIVE_INFINITY, -1.0D}) {
-      assertEquals(392, scanAt(new NearbyBlockTracker(), new Vector(0, 0, 1), distance).size());
+      assertEquals(normalScanSize, scanAt(new NearbyBlockTracker(), new Vector(0, 0, 1), distance).size());
     }
-    assertEquals(392, scanAt(new NearbyBlockTracker(), new Vector(Double.NaN, 0, 1), 4.0D).size());
+    assertEquals(
+      normalScanSize,
+      scanAt(new NearbyBlockTracker(), new Vector(Double.NaN, 0, 1), MAX_LOOK_AHEAD).size()
+    );
   }
 
   @Test
@@ -301,12 +324,16 @@ final class SampleTypesTest {
     NearbyBlockTracker tracker = new NearbyBlockTracker();
     Position position = new Position(0.5D, 64.0D, 0.5D);
     Vector look = new Vector(0, 0, 1);
-    BlockPosition removed = new BlockPosition(0, 64, 5);
+    BoundingBox playerBox = playerBoxAt(position);
+    BlockPosition removed = boundaryTarget(playerBox, look, MAX_LOOK_AHEAD);
     AtomicReference<BlockState> state = new AtomicReference<>(BlockState.stone());
     BlockCache cache = blockCache(block -> block.equals(removed) ? state.get() : BlockState.stone());
 
-    List<BlockUpdate> initial = sampleAt(tracker, cache, position, look, 2.0D);
-    assertEquals(504, initial.size(), "the entire extended box must be sampled without occlusion filtering");
+    List<BlockUpdate> initial = sampleAt(tracker, cache, position, look, MAX_LOOK_AHEAD);
+    assertEquals(
+      scanVolume(playerBox, look, MAX_LOOK_AHEAD), initial.size(),
+      "the entire extended box must be sampled without occlusion filtering"
+    );
     state.set(BlockState.empty());
     List<BlockUpdate> updates = sampleAt(tracker, cache, position, look, 0.0D);
     assertEquals(1, updates.size());
@@ -337,13 +364,70 @@ final class SampleTypesTest {
     Vector lookDirection, double movementDistance
   ) {
     return tracker.dirtyNearbyBlocks(
-      blockCache,
-      BoundingBox.fromBounds(
-        position.getX() - 0.3D, position.getY(), position.getZ() - 0.3D,
-        position.getX() + 0.3D, position.getY() + 1.8D, position.getZ() + 0.3D
-      ),
+      blockCache, playerBoxAt(position),
       lookDirection, movementDistance
     );
+  }
+
+  private static BoundingBox playerBoxAt(Position position) {
+    return BoundingBox.fromBounds(
+      position.getX() - 0.3D, position.getY(), position.getZ() - 0.3D,
+      position.getX() + 0.3D, position.getY() + 1.8D, position.getZ() + 0.3D
+    );
+  }
+
+  private static int scanVolume(BoundingBox box, Vector lookDirection, double lookAheadDistance) {
+    int sizeX = scanMax(box.maxX, lookDirection.getX(), lookAheadDistance)
+      - scanMin(box.minX, lookDirection.getX(), lookAheadDistance) + 1;
+    int sizeY = scanMax(box.maxY, lookDirection.getY(), lookAheadDistance)
+      - scanMin(box.minY, lookDirection.getY(), lookAheadDistance) + 1;
+    int sizeZ = scanMax(box.maxZ, lookDirection.getZ(), lookAheadDistance)
+      - scanMin(box.minZ, lookDirection.getZ(), lookAheadDistance) + 1;
+    return sizeX * sizeY * sizeZ;
+  }
+
+  private static BlockPosition boundaryTarget(
+    BoundingBox box, Vector direction, double lookAheadDistance
+  ) {
+    return new BlockPosition(
+      scanCoordinate(box.minX, box.maxX, direction.getX(), lookAheadDistance),
+      scanCoordinate(box.minY, box.maxY, direction.getY(), lookAheadDistance),
+      scanCoordinate(box.minZ, box.maxZ, direction.getZ(), lookAheadDistance)
+    );
+  }
+
+  private static int scanCoordinate(
+    double minimum, double maximum, double direction, double lookAheadDistance
+  ) {
+    if (direction < 0.0D) {
+      return scanMin(minimum, direction, lookAheadDistance);
+    }
+    if (direction > 0.0D) {
+      return scanMax(maximum, direction, lookAheadDistance);
+    }
+    return floor((minimum + maximum) * 0.5D);
+  }
+
+  private static int scanMin(double minimum, double direction, double lookAheadDistance) {
+    return floor(minimum - NEARBY_BLOCK_RADIUS + Math.min(0.0D, direction * lookAheadDistance));
+  }
+
+  private static int scanMax(double maximum, double direction, double lookAheadDistance) {
+    return floor(maximum + NEARBY_BLOCK_RADIUS + Math.max(0.0D, direction * lookAheadDistance));
+  }
+
+  private static BlockPosition offsetAlong(BlockPosition position, Vector direction, int distance) {
+    return new BlockPosition(
+      position.getX() + (int) Math.signum(direction.getX()) * distance,
+      position.getY() + (int) Math.signum(direction.getY()) * distance,
+      position.getZ() + (int) Math.signum(direction.getZ()) * distance
+    );
+  }
+
+  private static int decayTicksUntilNormal() {
+    return (int) Math.ceil(
+      Math.log(MIN_LOOK_AHEAD / MAX_LOOK_AHEAD) / Math.log(LOOK_AHEAD_DECAY)
+    ) + 1;
   }
 
   private static List<BlockUpdate> dirtyNearbyBlocks(
