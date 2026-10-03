@@ -160,6 +160,12 @@ registerBenchmarkTask(
 )
 
 registerBenchmarkTask(
+  "benchmarkWorldHeight",
+  "Measures cached per-world height-bound lookup latency and throughput.",
+  "de.jpx3.intave.world.WorldHeightBenchmark",
+)
+
+registerBenchmarkTask(
   "benchmarkCopyOnWriteIdentityMap",
   "Measures read latency and throughput of the copy-on-write identity map.",
   "de.jpx3.intave.share.CopyOnWriteIdentityMapBenchmark",

@@ -1,21 +1,20 @@
 package de.jpx3.intave.world;
 
-import com.google.common.collect.MapMaker;
 import de.jpx3.intave.adapter.MinecraftVersions;
+import de.jpx3.intave.share.CopyOnWriteIdentityMap;
 import org.bukkit.World;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.util.Map;
 import java.util.Objects;
 
 @SuppressWarnings("PointlessArithmeticExpression")
 public final class WorldHeight {
   private static final boolean MINECRAFT_18 = MinecraftVersions.VER1_18_0.atOrAbove();
   private static final MethodHandle MINIMUM_HEIGHT_ACCESSOR = minimumHeightAccessor();
-  private static final Map<World, Bounds> WORLD_BOUNDS =
-    new MapMaker().weakKeys().makeMap();
+  private static final CopyOnWriteIdentityMap<World, Bounds> WORLD_BOUNDS =
+    new CopyOnWriteIdentityMap<>();
   public static final int UPPER_WORLD_LIMIT = MINECRAFT_18 ? 256 + 64 : 256;
   public static final int LOWER_WORLD_LIMIT = MINECRAFT_18 ?   0 - 64 : 0;
 
@@ -33,14 +32,18 @@ public final class WorldHeight {
   }
 
   private static Bounds bounds(World world) {
-    Objects.requireNonNull(world, "world");
     Bounds cached = WORLD_BOUNDS.get(world);
-    if (cached != null) {
-      return cached;
-    }
-    Bounds resolved = new Bounds(resolveMinimum(world), world.getMaxHeight());
-    Bounds raced = WORLD_BOUNDS.putIfAbsent(world, resolved);
-    return raced == null ? resolved : raced;
+    return cached == null
+      ? WORLD_BOUNDS.computeIfAbsent(world, WorldHeight::resolveBounds)
+      : cached;
+  }
+
+  public static void invalidate(World world) {
+    WORLD_BOUNDS.remove(Objects.requireNonNull(world, "world"));
+  }
+
+  private static Bounds resolveBounds(World world) {
+    return new Bounds(resolveMinimum(world), world.getMaxHeight());
   }
 
   private static int resolveMinimum(World world) {

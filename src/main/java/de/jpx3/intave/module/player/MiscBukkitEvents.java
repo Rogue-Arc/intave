@@ -30,6 +30,7 @@ import de.jpx3.intave.user.meta.InventoryMetadata;
 import de.jpx3.intave.user.permission.BukkitPermissionCheck;
 import de.jpx3.intave.version.DurationTranslator;
 import de.jpx3.intave.version.IntaveVersion;
+import de.jpx3.intave.world.WorldHeight;
 import org.bukkit.*;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -135,6 +136,7 @@ public final class MiscBukkitEvents extends Module {
   @BukkitEventSubscription
   public void on(WorldUnloadEvent unloadEvent) {
     World world = unloadEvent.getWorld();
+    WorldHeight.invalidate(world);
     GarbageCollector.clear(world);
     GarbageCollector.clearIf(o -> o instanceof Location && ((Location) o).getWorld().equals(world));
   }
