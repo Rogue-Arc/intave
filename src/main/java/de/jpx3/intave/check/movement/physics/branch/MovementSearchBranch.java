@@ -290,4 +290,17 @@ public final class MovementSearchBranch {
 		result = 31 * result + environmentModifier.hashCode();
 		return result;
 	}
+
+	@Override
+	public String toString() {
+		return "MovementSearchBranch{" +
+			"configuration=" + configuration +
+			", reduceBefore=" + configuration.reduceBefore() +
+			", overrideEndMotionToActualMotion=" + configuration.overrideEndMotionToActualMotion() +
+			", alternateBlockInsideCheck=" + configuration.usesAlternateBlockInsideCheck() +
+			", environmentModifierApplied=" + environmentModifierApplied +
+			", canFinishExplicitTick=" + canFinishExplicitTick +
+			", frequencyKey=0x" + Long.toHexString(frequencyKey) +
+			'}';
+	}
 }

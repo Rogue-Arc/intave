@@ -209,4 +209,32 @@ final class MovementSearchBranchEnvironmentCacheTest {
     assertEquals(0.6D, modified.baseMotionZ());
   }
 
+  @Test
+  void toStringIncludesCompleteDebuggingState() {
+    MovementSearchBranch branch = MovementSearchBranch.blank(null)
+      .withKeypress(1, -1)
+      .withHandActive(true)
+      .withReduceTicks(2)
+      .withReduceBefore(true)
+      .withJumped(true)
+      .withSprintingSetTo(true)
+      .withActualMotionOverride(false)
+      .withAlternativeBlockInsideCheck(true)
+      .withFlying(true)
+      .withExplicitTickFinishAllow(false);
+
+    String description = branch.toString();
+
+    assertTrue(description.startsWith(
+      "MovementSearchBranch{configuration=(WA) _RED2_SPR_JMP_HA"
+    ));
+    assertTrue(description.contains("reduceBefore=true"));
+    assertTrue(description.contains("overrideEndMotionToActualMotion=false"));
+    assertTrue(description.contains("alternateBlockInsideCheck=true"));
+    assertTrue(description.contains("environmentModifierApplied=true"));
+    assertTrue(description.contains("canFinishExplicitTick=false"));
+    assertTrue(description.contains(
+      "frequencyKey=0x" + Long.toHexString(branch.frequencyKey())
+    ));
+  }
 }
