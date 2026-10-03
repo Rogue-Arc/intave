@@ -17,6 +17,7 @@ import de.jpx3.intave.cleanup.ShutdownTasks;
 import de.jpx3.intave.diagnostic.MemoryWatchdog;
 import de.jpx3.intave.executor.Synchronizer;
 import de.jpx3.intave.module.mitigate.HurttimeModifier;
+import de.jpx3.intave.share.CopyOnWriteHashMap;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
@@ -25,13 +26,11 @@ import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 public final class UserRepository {
-  private static final Map<UUID, User> repository = MemoryWatchdog.watch("users", new ConcurrentHashMap<>());
+  private static final CopyOnWriteHashMap<UUID, User> repository = MemoryWatchdog.watch("users", new CopyOnWriteHashMap<>());
   private static final User fallbackUser = UserFactory.createFallback();
 
   // used to load the class on startup
@@ -90,9 +89,7 @@ public final class UserRepository {
   }
 
   public static void applyOnAll(Consumer<? super User> consumer) {
-    for (User user : repository.values()) {
-      consumer.accept(user);
-    }
+    repository.forEachValue(consumer);
   }
 
   public static void applyOnOnlineUsers(Consumer<? super User> consumer) {
@@ -110,12 +107,12 @@ public final class UserRepository {
   }
 
   private static void unregisterAll() {
-    for (UUID uuid : repository.keySet()) {
+    repository.forEachKey(uuid -> {
       Player player = Bukkit.getPlayer(uuid);
       if (player != null) {
         unregisterUser(player);
       }
-    }
+    });
   }
 
 	public static User fallback() {

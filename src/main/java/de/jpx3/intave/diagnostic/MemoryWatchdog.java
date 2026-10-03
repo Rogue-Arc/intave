@@ -2,6 +2,7 @@ package de.jpx3.intave.diagnostic;
 
 import de.jpx3.intave.agent.AgentAccessor;
 import de.jpx3.intave.executor.BackgroundExecutors;
+import de.jpx3.intave.share.CopyOnWriteMap;
 
 import java.lang.reflect.Field;
 import java.util.*;
@@ -78,6 +79,14 @@ public final class MemoryWatchdog {
       for (Object value : ((Map<?, ?>) object).values()) {
         memoryUsage += memoryUsageOf(value, identifiedObjects);
       }
+    }
+    if (object instanceof CopyOnWriteMap) {
+      long[] entryMemoryUsage = {0L};
+      ((CopyOnWriteMap<?, ?>) object).forEach((key, value) -> {
+        entryMemoryUsage[0] += memoryUsageOf(key, identifiedObjects);
+        entryMemoryUsage[0] += memoryUsageOf(value, identifiedObjects);
+      });
+      memoryUsage += entryMemoryUsage[0];
     }
     if (object instanceof Iterable) {
       Iterable<?> iterable = (Iterable<?>) object;
