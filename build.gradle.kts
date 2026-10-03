@@ -159,6 +159,18 @@ registerBenchmarkTask(
   "de.jpx3.intave.block.cache.BlockReplacementCacheBenchmark",
 )
 
+registerBenchmarkTask(
+  "benchmarkCopyOnWriteIdentityMap",
+  "Measures read latency and throughput of the copy-on-write identity map.",
+  "de.jpx3.intave.share.CopyOnWriteIdentityMapBenchmark",
+)
+
+registerBenchmarkTask(
+  "benchmarkCopyOnWriteHashMap",
+  "Compares the copy-on-write UUID map with ConcurrentHashMap at 3,000 entries.",
+  "de.jpx3.intave.share.CopyOnWriteHashMapBenchmark",
+)
+
 /*
  * plugin.yml
  */
