@@ -33,7 +33,7 @@ module.exports = async function prepareModrinth({ core, context, github }) {
     }
   }
 
-  // Commit-based versions stay stable across retries and moving dev-build tags.
+  // Commit-based versions stay stable across retries and the moving nightly tag.
   const version = isRelease ? context.ref.slice('refs/tags/'.length) : `dev-${context.sha.slice(0, 12)}`;
   const response = await fetch(
     `https://api.modrinth.com/v2/project/${encodeURIComponent(project)}/version/${encodeURIComponent(version)}`,

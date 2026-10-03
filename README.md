@@ -8,7 +8,7 @@ Intave source-available to everyone.
 
 ## Downloads
 - [Auto Loader](https://github.com/intave/loader/releases/download/1.0.1/IntaveLoader.jar) (Recommended)
-- [Latest Devbuild](https://github.com/intave/intave/releases/download/dev-build/Intave.jar)
+- [Nightly Build](https://github.com/intave/intave/releases/download/nightly/Intave.jar)
 - [Modrinth](https://modrinth.com/plugin/intave)
 
 ## Detection

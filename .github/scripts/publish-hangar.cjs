@@ -64,7 +64,7 @@ module.exports = async function publishHangar({ core, context, github }, {
 
   const { data: release } = await github.rest.repos.getReleaseByTag({
     ...context.repo,
-    tag: isRelease ? version : 'dev-build',
+    tag: isRelease ? version : 'nightly',
   });
   const body = new FormData();
   body.append('versionUpload', new Blob([JSON.stringify({

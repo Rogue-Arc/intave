@@ -140,21 +140,21 @@ jobs:
             }
             core.setOutput('publish', publish ? 'true' : 'false');
 
-      - name: Move dev-build tag to built commit
+      - name: Move nightly tag to built commit
         if: steps.dev_build.outputs.publish == 'true'
         env:
           BUILD_SHA: ${{ github.sha }}
         run: |
-          git tag --force dev-build "$BUILD_SHA"
-          git push --force origin refs/tags/dev-build
+          git tag --force nightly "$BUILD_SHA"
+          git push --force origin refs/tags/nightly
 
-      - name: Replace Latest Dev Build assets and notes
+      - name: Replace Nightly Build assets and notes
         id: dev_release
         if: steps.dev_build.outputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: dev-build
-          name: Latest Dev Build
+          tag_name: nightly
+          name: Nightly Build
           overwrite_files: true
           files: |
             build/libs/Intave.jar
