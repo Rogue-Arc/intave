@@ -28,9 +28,9 @@ import java.util.List;
 import static de.jpx3.intave.share.ClientMath.floor;
 
 final class NearbyBlockTracker {
-	private static final double NEARBY_BLOCK_RADIUS = 3.0D;
+	private static final double NEARBY_BLOCK_RADIUS = 2.0D;
 	private static final double LOOK_AHEAD_DECAY = 0.8D;
-	private static final double MAX_LOOK_AHEAD = 4.0D;
+	private static final double MAX_LOOK_AHEAD = 2.0D;
 	private static final double MIN_LOOK_AHEAD = 0.01D;
 	private static final int MAX_RECORDED_BLOCKS = 10_000;
 
