@@ -56,37 +56,15 @@ public final class UpdateBrancher extends MovementSearchBrancher {
 		UnaryOperator<SimulationEnvironment> environmentUpdater = UnaryOperator.identity();
 		List<UnaryOperator<SimulationEnvironment>> options = new ArrayList<>();
 		List<Boolean> canFinishTick = new ArrayList<>();
-		List<TickAmbiguousUpdate> updatesAppliedThisTick = new ArrayList<>();
-		long appliedSequence = environment.activeSequence();
-		int optionIndex = 0;
 		long requiredForExplicitTick = Math.max(
 			lastVerifiedCompleteUpdate, lastExplicitlyRequiredUpdate
 		);
 
-		while (true) {
-			if (firstUpdateThatCannotBePostponed == Long.MAX_VALUE
-				|| appliedSequence >= firstUpdateThatCannotBePostponed) {
-				options.add(environmentUpdater);
-				canFinishTick.add(appliedSequence >= requiredForExplicitTick);
-			}
-			if (optionIndex == updates.size()) {
-				break;
-			}
-
-			TickAmbiguousUpdate update = updates.get(optionIndex++);
-			if (!canRunInSameTick(update, updatesAppliedThisTick)) {
-				break;
-			}
-			updatesAppliedThisTick.add(update);
-
-			CausalConstraint constraint = update.constraint();
-			environmentUpdater = andThen(environmentUpdater, env -> {
-				update.applyTo(env);
-				env.setActiveSequence(constraint.sequenceNumber());
-				return env;
-			});
-			appliedSequence = constraint.sequenceNumber();
-		}
+		collectOptions(
+			updates, 0, environmentUpdater, environment.activeSequence(),
+			new ArrayList<>(), true, firstUpdateThatCannotBePostponed,
+			requiredForExplicitTick, options, canFinishTick
+		);
 
 		for (int i = options.size() - 1; i >= 0; i--) {
 			UnaryOperator<SimulationEnvironment> envUpdate = options.get(i);
@@ -95,6 +73,57 @@ public final class UpdateBrancher extends MovementSearchBrancher {
 			cfg = cfg.withAmbiguousUpdates(envUpdate, i, thisCanFinishTick);
 			cfg = cfg.withExplicitTickFinishAllow(thisCanFinishTick);
 			outputBranches.add(cfg);
+		}
+	}
+
+	private static void collectOptions(
+		List<TickAmbiguousUpdate> updates,
+		int updateIndex,
+		UnaryOperator<SimulationEnvironment> environmentUpdater,
+		long appliedSequence,
+		List<TickAmbiguousUpdate> updatesAppliedThisTick,
+		boolean currentStateChanged,
+		long firstUpdateThatCannotBePostponed,
+		long requiredForExplicitTick,
+		List<UnaryOperator<SimulationEnvironment>> options,
+		List<Boolean> canFinishTick
+	) {
+		if (currentStateChanged && (firstUpdateThatCannotBePostponed == Long.MAX_VALUE
+			|| appliedSequence >= firstUpdateThatCannotBePostponed)) {
+			options.add(environmentUpdater);
+			canFinishTick.add(appliedSequence >= requiredForExplicitTick);
+		}
+		if (updateIndex == updates.size()) {
+			return;
+		}
+
+		TickAmbiguousUpdate update = updates.get(updateIndex);
+		if (canRunInSameTick(update, updatesAppliedThisTick)) {
+			CausalConstraint constraint = update.constraint();
+			UnaryOperator<SimulationEnvironment> updatedEnvironment = andThen(
+				environmentUpdater,
+				env -> {
+					update.applyTo(env);
+					env.setActiveSequence(constraint.sequenceNumber());
+					return env;
+				}
+			);
+			updatesAppliedThisTick.add(update);
+			collectOptions(
+				updates, updateIndex + 1, updatedEnvironment,
+				constraint.sequenceNumber(), updatesAppliedThisTick, true,
+				firstUpdateThatCannotBePostponed, requiredForExplicitTick,
+				options, canFinishTick
+			);
+			updatesAppliedThisTick.remove(updatesAppliedThisTick.size() - 1);
+		}
+
+		if (update.canBeSkipped()) {
+			collectOptions(
+				updates, updateIndex + 1, environmentUpdater, appliedSequence,
+				updatesAppliedThisTick, false, firstUpdateThatCannotBePostponed,
+				requiredForExplicitTick, options, canFinishTick
+			);
 		}
 	}
 

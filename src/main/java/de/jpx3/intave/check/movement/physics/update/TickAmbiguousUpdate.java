@@ -34,6 +34,13 @@ public abstract class TickAmbiguousUpdate implements Comparable<TickAmbiguousUpd
 	}
 
 	/**
+	 * Whether this update may be discarded when a later causal update is applied.
+	 */
+	public boolean canBeSkipped() {
+		return false;
+	}
+
+	/**
 	 * Whether this update is compatible with another update in the same simulated tick.
 	 */
 	public boolean canRunInSameTickWith(TickAmbiguousUpdate other) {

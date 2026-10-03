@@ -183,4 +183,30 @@ final class MovementSearchBranchEnvironmentCacheTest {
       branch.modifiedMutableView(environment).activeSequence() == 1
     ));
   }
+
+  @Test
+  void optionalReductionCanBeSkippedForLaterMandatoryReduction() {
+    MockSimulationEnvironment environment = new MockSimulationEnvironment();
+    environment.setCurrentTick(2);
+    environment.setBaseMotion(1.0, 0.0, 1.0);
+    environment.allTickAmbiguousUpdates().add(
+      new Reduce(true, false, CausalConstraint.openEnded(0, 1))
+    );
+    environment.allTickAmbiguousUpdates().add(
+      new Reduce(true, CausalConstraint.openEnded(1, 2))
+    );
+
+    MovementSearchInput input = MovementSearchInput.forTick(null, null, environment, false);
+    Collection<MovementSearchBranch> branches = new ArrayList<>();
+    new UpdateBrancher().branch(input, MovementSearchBranch.blank(input), branches);
+
+    assertEquals(1, branches.size());
+    MovementSearchBranch branch = branches.iterator().next();
+    SimulationEnvironment modified = branch.modifiedMutableView(environment);
+    assertTrue(branch.canFinishExplicitTick());
+    assertEquals(2, modified.activeSequence());
+    assertEquals(0.6D, modified.baseMotionX());
+    assertEquals(0.6D, modified.baseMotionZ());
+  }
+
 }

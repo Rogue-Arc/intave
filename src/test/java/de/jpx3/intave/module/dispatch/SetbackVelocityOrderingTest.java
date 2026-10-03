@@ -114,6 +114,30 @@ class SetbackVelocityOrderingTest {
     }
   }
 
+  @Test void transactionTriggeredGroundOnlyTickCannotDiscardVelocity() {
+    for (boolean additive : new boolean[] {false, true}) {
+      Harness h = new Harness(true);
+      MotionUpdate velocity = additive ? h.explosion() : h.velocity();
+      velocity.activate(h.movement);
+      velocity.canNotRunAfterThisTick(h.movement);
+
+      h.movement.tickComplete(false, false, true);
+
+      assertTrue(h.movement.currentTick() > velocity.constraint().notAfter());
+      assertTrue(h.movement.allTickAmbiguousUpdates().contains(velocity));
+      assertTrue(velocity.possible(h.movement));
+
+      MovementSearchInput input = MovementSearchInput.forTick(h.user,
+        h.movement.simulator(), h.movement, false);
+      List<MovementSearchBranch> branches = new ArrayList<>();
+      new UpdateBrancher().branch(input, MovementSearchBranch.blank(input), branches);
+      assertEquals(1, branches.size(), "The next explicit movement must apply the retained velocity");
+      SimulationEnvironment next = branches.get(0).modifiedMutableView(h.movement);
+      assertEquals(additive ? EXPLOSION : VELOCITY, next.mutableBaseMotionCopy());
+      assertEquals(velocity.constraint().sequenceNumber(), next.activeSequence());
+    }
+  }
+
   @Test void externalTeleportStillSupersedesScheduledCorrectionAndOldVelocity() {
     Harness h = new Harness(false);
     h.request();

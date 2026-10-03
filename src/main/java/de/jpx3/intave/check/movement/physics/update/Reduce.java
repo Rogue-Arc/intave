@@ -64,6 +64,11 @@ public final class Reduce extends TickAmbiguousUpdate {
 	}
 
 	@Override
+	public boolean canBeSkipped() {
+		return !mandatory;
+	}
+
+	@Override
 	public boolean canRunInSameTickWith(TickAmbiguousUpdate other) {
 		return !lastActiveInTick
 			|| !(other instanceof Reduce)
